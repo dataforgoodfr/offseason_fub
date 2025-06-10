@@ -23,12 +23,13 @@ group_of_questions = {'Stationnement':[f"q{i}" for i in range(35,40)],
 
 not_found_insee_codes = []
 for insee_code in insee_codes:
-    try:
-        nom_commune = insee_refs.loc[insee_refs["INSEE"]==insee_code, "Commune"].item() # récupère le nom de la commune associée au code INSEE
-    except:
+    nom_commune = insee_refs.loc[insee_refs["INSEE"]==insee_code, "Commune"] # récupère le nom de la commune associée au code INSEE
+    if len(nom_commune) == 0:
         print(f"Le numéro INSEE {insee_code} n'a pas été trouvé dans le tableau des communes")
         nom_commune = insee_code
         not_found_insee_codes.append(insee_code)
+    else:
+        nom_commune = nom_commune.item()
     df_commune = data_2021[data_2021[commune_id] == insee_code].copy()
     # moyennage de l'ensemble des critères d'évaluation
     df_commune["average_notes"] = df_commune[questions_to_average].mean(axis=1)
