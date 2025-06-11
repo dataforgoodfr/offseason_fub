@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 import io
+from io import StringIO
 from botocore.exceptions import ClientError
 
 # Load environment variables from .env file
@@ -44,6 +45,13 @@ def preview_file(key, bucket_name='fub-s3', nrows=None, csv_sep=";", csv_engine=
 
     return df
 
+def write_csv_on_s3(df, save_path, bucket_name='fub-s3', csv_sep=";", quotechar='"'):
+    # Convert DataFrame to CSV in memory
+    csv_buffer = StringIO()
+    df.to_csv(csv_buffer, index=False, sep=csv_sep, quotechar=quotechar)
+    # Define S3 bucket and file path
+    s3.put_object(Bucket=bucket_name, Key=save_path, Body=csv_buffer.getvalue())
+
 #function to list objects in bucket
 def list_objects(bucket_name='fub-s3'):
     """List up to 1000 objects in a bucket."""
@@ -61,15 +69,6 @@ def list_objects(bucket_name='fub-s3'):
 
     return [obj["Key"] for obj in contents]
 
-def write_file_on_s3(df, path, bucket_name='fub-s3'):
-    s3.put_object(
-        Bucket=bucket_name,
-        Key=path,
-        Body=df
-    )
-
-
-
 
 
 
@@ -81,3 +80,4 @@ if __name__ == '__main__':
     dest_path = "data/converted/2025/brut/220128_BV_Communes_catégories.csv"
     file_path = "220128_BV_Communes_catégories.csv"
     #response = s3.upload_file(file_path, 'fub-s3', dest_path)
+
