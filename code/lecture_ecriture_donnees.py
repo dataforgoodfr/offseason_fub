@@ -51,6 +51,7 @@ def write_csv_on_s3(df, save_path, bucket_name='fub-s3', csv_sep=";", quotechar=
     df.to_csv(csv_buffer, index=False, sep=csv_sep, quotechar=quotechar)
     # Define S3 bucket and file path
     s3.put_object(Bucket=bucket_name, Key=save_path, Body=csv_buffer.getvalue())
+    print(f"File saved on s3 at location {save_path}")
 
 #function to list objects in bucket
 def list_objects(bucket_name='fub-s3'):
