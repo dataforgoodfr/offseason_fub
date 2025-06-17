@@ -26,7 +26,7 @@ def filter_one_commune_2025_method(df_commune, questions_to_average, avg_note_at
 
     Limite de la méthode : le rejet de l'hypothèse "la distribution gaussienne est rejetée" n'est en réalité pas suffisant pour conclure qu'il y a eu
     une fraude. Il peut y avoir d'autres raisons (par exemple, une partie de la ville est bien desservie en pistes cyclables et l'autre non).
-    En utilisant le formalisme de test d'hypothèse décrit plus haut, il s'avérait que l'algorithme rejetait l'hypothèse H0 bien trop ouvent même
+    En utilisant le formalisme de test d'hypothèse décrit plus haut, il s'avérait que l'algorithme rejetait l'hypothèse H0 bien trop souvent même
     avec des valeurs de alpha extremement faibles. C'est pourquoi, on choisit de filter les queues inférieures et supérieures seulement
     lorsque N_low ou N_upp sont supérieurs à 2*k (au lieu de k).
 
@@ -54,10 +54,12 @@ def filter_one_commune_2025_method(df_commune, questions_to_average, avg_note_at
     N_sample = len(df_commune)
     p = norm.cdf(-2)  # probabilité qu'un echantillon aléatoire d'une distribution gaussienne soit inférieur à mu - 2*std
     k = int(binom.ppf(1 - alpha, N_sample, p)) # k est tel que P(Y>k) = alpha avec Y ~ B(N_sample, p)
+    """
     print('N sample', N_sample)
     print('k', k)
     print('len upper queue', len(upper_queue))
     print('len lower queue', len(lower_queue))
+    """
     filter = (len(upper_queue) >= 2*k or len(lower_queue) >= 2*k)
     if filter:
         filtered_data = central_values.copy()
@@ -118,12 +120,16 @@ def filter_data_set(df, questions_to_average, commune_id, save_key, insee_refs, 
     insee_codes = df[commune_id].unique()
     all_filtered_data = []
     df = df.dropna(subset=questions_to_average)
+    print('nombre de communes avec au moins 1 contribution', len(insee_codes))
+    potential_fraudulous_communes = []
     for insee_code in insee_codes:
         nom_commune, _, _ = get_commune_name_from_insee(insee_code, insee_refs)
         df_commune = df[df[commune_id] == insee_code].copy()
         if len(df_commune) >= nb_contribution_min:
             # moyennage de l'ensemble des critères d'évaluation
             filtered, filter, adjusted_mean, adjusted_std = filter_one_commune_2025_method(df_commune, questions_to_average, avg_note_att_name)
+            if filter:
+                potential_fraudulous_communes.append(nom_commune)
             if nom_commune in communes_to_save or filter:
                 plot_histo(df_commune[avg_note_att_name],1,6,0.2, adjusted_mean, adjusted_std,
                            f"Distribution de la note moyenne pour la commune {nom_commune} (avant filtrage)",
@@ -133,6 +139,9 @@ def filter_data_set(df, questions_to_average, commune_id, save_key, insee_refs, 
                            f"Distribution de la note moyenne pour la commune {nom_commune} (après filtrage)",
                            f'{histo_save_fold}/histo_avg_notes_{nom_commune}_après_filtrage.png')
             all_filtered_data.append(filtered)
+    print('Nombre de communes avec plus de 10 contributiuons', len(all_filtered_data))
+    print('Nombre de communes potentiellement frauduleuse', len(potential_fraudulous_communes))
+    print('Communes potentiellement frauduleuses', potential_fraudulous_communes)
     all_filtered_data = pd.concat(all_filtered_data, ignore_index=True)
     # all_filtered_data.to_csv("/home/thibaut/filtered.csv", index=False)
     write_csv_on_s3(all_filtered_data, save_key)
@@ -219,7 +228,7 @@ def plot_histo(values, start, stop, step, adjusted_mean, adjusted_std, title, sa
 
 
 if __name__ == '__main__':
-    data_2025 = False # = True si on souhaite nettoyer les données de 2025, =False si on souhaite nettoyer les données de 2021
+    data_2025 = True # = True si on souhaite nettoyer les données de 2025, =False si on souhaite nettoyer les données de 2021
 
     data = preview_file(key="data/converted/2025/brut/reponses-2025-04-29_Result 1.csv", nrows=None, csv_sep=",") \
         if data_2025 else preview_file(key="data/converted/2021/brut/reponses-2021-12-01-08-00-00.csv", nrows=None)
