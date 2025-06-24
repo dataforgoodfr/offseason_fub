@@ -163,5 +163,8 @@ cython_debug/
 # Precommit hooks: ruff cache
 .ruff_cache
 
+#file with local path save fold
+local_paths.py
+
 #env files with keys
 .env
