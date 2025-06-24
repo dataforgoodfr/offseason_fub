@@ -1,9 +1,9 @@
-from manage_files import your_local_save_fold, make_dir
+from local_paths import your_local_save_fold
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.stats import norm, binom
-from lecture_ecriture_donnees import preview_file, write_csv_on_s3
+from lecture_ecriture_donnees import preview_file, write_csv_on_s3, make_dir
 from utils import get_commune_name_from_insee
 
 

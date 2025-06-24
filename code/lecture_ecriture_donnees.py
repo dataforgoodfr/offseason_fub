@@ -70,7 +70,9 @@ def list_objects(bucket_name='fub-s3'):
 
     return [obj["Key"] for obj in contents]
 
-
+def make_dir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 
 

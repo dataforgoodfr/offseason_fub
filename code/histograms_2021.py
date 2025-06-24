@@ -1,4 +1,4 @@
-from manage_files import your_local_save_fold, make_dir
+from local_paths import your_local_save_fold, make_dir
 from lecture_ecriture_donnees import preview_file
 from nettoyage_donnees import get_commune_name_from_insee
 import numpy as np

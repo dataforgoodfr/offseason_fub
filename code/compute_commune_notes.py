@@ -1,8 +1,7 @@
-from tokenize import group
-from manage_files import make_dir, your_local_save_fold
+from local_paths import your_local_save_fold
 import pandas as pd
 
-from lecture_ecriture_donnees import preview_file, write_csv_on_s3
+from lecture_ecriture_donnees import preview_file, write_csv_on_s3, make_dir
 from utils import get_commune_name_from_insee
 import numpy as np
 

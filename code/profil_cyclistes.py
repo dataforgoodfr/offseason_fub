@@ -1,7 +1,7 @@
 import pandas as pd
 from lecture_ecriture_donnees import preview_file
 from utils import get_commune_name_from_insee
-from manage_files import your_local_save_fold
+from local_paths import your_local_save_fold
 
 
 """code pour analyser les questions liées au profil du cycliste, non encore fonctionnel"""
