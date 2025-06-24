@@ -13,7 +13,7 @@ load_dotenv()
 
 access_key = os.getenv("AWS_ACCESS_KEY_ID")
 secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-region = os.getenv("AWS_REGION")
+region = "fr-par" #os.getenv("AWS_REGION")
 endpoint_url = "https://s3.fr-par.scw.cloud"
 
 # Create the S3 client
@@ -69,6 +69,7 @@ def list_objects(bucket_name='fub-s3'):
         print(f" - {obj['Key']}")
 
     return [obj["Key"] for obj in contents]
+
 
 
 

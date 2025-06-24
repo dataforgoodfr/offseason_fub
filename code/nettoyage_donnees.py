@@ -1,13 +1,13 @@
-import os.path
-
+from manage_files import your_local_save_fold, make_dir
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.stats import norm, binom
 from lecture_ecriture_donnees import preview_file, write_csv_on_s3
+from utils import get_commune_name_from_insee
 
 
-def filter_one_commune_2025_method(df_commune, questions_to_average, avg_note_att_name="average_note", alpha=10**-3):
+def filter_one_commune_2025_method(df_commune, questions_to_average, commune_name, avg_note_att_name="average_note", alpha=8*10**-4):
     """Applique la méthodologie de nettoyage à un tableau pandas associé à une commune partiuclière (df_commune).
     La méthodologie est la suivante :
     1) calcul d'une moyenne et d'un écart type ajustés à l'aide de la méthode compute_adjusted_mean_std
@@ -28,7 +28,7 @@ def filter_one_commune_2025_method(df_commune, questions_to_average, avg_note_at
     une fraude. Il peut y avoir d'autres raisons (par exemple, une partie de la ville est bien desservie en pistes cyclables et l'autre non).
     En utilisant le formalisme de test d'hypothèse décrit plus haut, il s'avérait que l'algorithme rejetait l'hypothèse H0 bien trop souvent même
     avec des valeurs de alpha extremement faibles. C'est pourquoi, on choisit de filter les queues inférieures et supérieures seulement
-    lorsque N_low ou N_upp sont supérieurs à 2*k (au lieu de k).
+    lorsque N_low ou N_upp sont supérieurs à 3*k (au lieu de k).
 
     ENTREES :
         - df_commune (pd.DataFrame) : sous-ensemble des réponses associé à une commune particulière
@@ -45,29 +45,39 @@ def filter_one_commune_2025_method(df_commune, questions_to_average, avg_note_at
 
 
     df_commune[avg_note_att_name] = df_commune[questions_to_average].mean(axis=1)
-    adjusted_mean, adjusted_std = compute_adjusted_mean_std(df_commune[avg_note_att_name])
+    adjusted_mean, adjusted_std = compute_adjusted_mean_std(df_commune[avg_note_att_name], commune_name)
 
     upper_queue = df_commune[df_commune[avg_note_att_name] >= adjusted_mean + 2*adjusted_std]
     lower_queue = df_commune[df_commune[avg_note_att_name] <= adjusted_mean - 2*adjusted_std]
     central_values = df_commune[(df_commune[avg_note_att_name] >= adjusted_mean - 2*adjusted_std)
                                 & (df_commune[avg_note_att_name] <= adjusted_mean + 2*adjusted_std)]
+
     N_sample = len(df_commune)
     p = norm.cdf(-2)  # probabilité qu'un echantillon aléatoire d'une distribution gaussienne soit inférieur à mu - 2*std
     k = int(binom.ppf(1 - alpha, N_sample, p)) # k est tel que P(Y>k) = alpha avec Y ~ B(N_sample, p)
-    """
-    print('N sample', N_sample)
-    print('k', k)
-    print('len upper queue', len(upper_queue))
-    print('len lower queue', len(lower_queue))
-    """
     filter = (len(upper_queue) >= 2*k or len(lower_queue) >= 2*k)
     if filter:
+        print('Communes filtrée', commune_name)
+        print('N sample', N_sample)
+        print('k', k)
+        print('len upper queue', len(upper_queue))
+        print('len lower queue', len(lower_queue))
         filtered_data = central_values.copy()
     else:
         filtered_data = df_commune.copy()
-    return filtered_data, filter, adjusted_mean, adjusted_std
+    largest_queue = upper_queue if len(upper_queue) > len(lower_queue) else lower_queue
+    return filtered_data, filter, adjusted_mean, adjusted_std, largest_queue
 
 
+def create_view_with_identical_ip(df_commune, ip_id, commentaire_id, email_id, avg_note_att_name, x=2):
+    """créer une vue du tableau d'entrée ou seul sont conservées les lignes pour lesquels l'adresse ip associée à la
+    ligne apparait au moins x fois dans le tableau"""
+    ip_counts = df_commune[ip_id].value_counts()
+    ip_doublon = ip_counts[ip_counts>=x].index
+    df_ip_doublon = df_commune[df_commune[ip_id].isin(ip_doublon)]
+    df_ip_doublon_view = df_ip_doublon[[ip_id, avg_note_att_name, email_id, commentaire_id]]
+    df_ip_doublon_view = df_ip_doublon_view.sort_values(by=ip_id)
+    return df_ip_doublon_view
 
 
 def filter_one_commune_2019_method(df_commune, questions_to_average, email_id, avg_note_att_name="average_note"):
@@ -92,8 +102,8 @@ def filter_one_commune_2019_method(df_commune, questions_to_average, email_id, a
     print('Nombre de réponses après filtrage', len(filtered))
     return filtered
 
-def filter_data_set(df, questions_to_average, commune_id, save_key, insee_refs, histo_save_fold,
-                    communes_to_save, nb_contribution_min=10, avg_note_att_name="average_note"):
+def filter_data_set(df, questions_to_average, commune_id, commentaire_id, ip_id, email_id, save_key, insee_refs, histo_save_fold,
+                    communes_to_save, nb_contribution_min=[30,50], avg_note_att_name="average_note"):
     """Applique la méthodologie de nettoyage des données à l'ensemble des communes, écris les données nettoyées sur le S3 et
     sauvegarde en local les histogrames des notes moyennes (avant et après filtrage) de certaines communes, à savoir les communes spéccifiées par la variable
     commune_to_save, et les communes pour lesquels une fraude potentiel a été detectée. La méthodologie de nettoyage est effectuée par la
@@ -104,82 +114,88 @@ def filter_data_set(df, questions_to_average, commune_id, save_key, insee_refs, 
         - questions_to_average (list). Liste contenant l'ensemble des noms de colonnes associées aux questions pour lesquelles
                         une note de 1 à 6 était demandée.
         - commune_id (str). Nom de la colonne associée à la question demandant la commune à évaluer
+        - commentaire_id (str). Nom de la colonne associé aux commentaires qualitatifs
         - save_key (str). Chemin de sauvegarde des données nettoyées sur le S3
         - insee_refs (pd.DataFrame). Tableau pandas associant les codes INSEE au nom de commune et autres caractéristiques de la commune
-        - histo_save_fold : chemin (en local) de sauvegarde des histogrammes des notes moyennes
+        - histo_save_fold : chemin (en local) de sauvegarde des histogrammes des notes moyennes. Le dossier est séparé en 3
+            sous-dossier, dans le dossier "potential_fraud_detected" sont sauvegardés les communes pour lesquelles une fraude potentielle a été detecté.
+            Dans le dossier "specified_communes" sont sauvegardées les communes pour lesquelles spécifiées dans la liste communes_to_save.
+            Dans le dossier "identical_ip" sont sauvegardées des csv associées à des contributions avec adresse ip identiques.
         - commune_to_save (list de str). Liste contenant les noms de communes pour lesquelles l'on souhaite sauvegarder les histogrammes des notes moyennes.
          En plus des communes de la liste seont sauverardée les histogrammes des communes pour lesquels il y a une fraude potentielle
-        - nb_contribution_min (int) : toutes les communes ayant moins de contributions (avant nettoyage) que cette valeur sont supprimées
+        - nb_contribution_min (list of  2 int) : toutes les communes de moins de 5000 habitants  ayant moins de contributions
+                    que nb_contribution_min[0] sont supprimées. Toutes les communes de plus de 5000 habitants ayant moins de
+                    contributions que nb_contribution_min[1] sont supprimées
         - avg_note_att_name (str) : un attribut "note moyenne" est ajouté au tableau, avg_note_att_name est le nom de cet attribut
     SORTIES:
         - all_filtered_data (pd.DataFrame). Le tableau pandas contenant les données netoyées
     """
 
-    if not os.path.exists(histo_save_fold):
-        os.makedirs(histo_save_fold)
+    make_dir(histo_save_fold)
+    df = df.dropna(subset=questions_to_average)
     insee_codes = df[commune_id].unique()
     all_filtered_data = []
-    df = df.dropna(subset=questions_to_average)
     print('nombre de communes avec au moins 1 contribution', len(insee_codes))
     potential_fraudulous_communes = []
+    communes_with_identical_ip = []
     for insee_code in insee_codes:
-        nom_commune, _, _ = get_commune_name_from_insee(insee_code, insee_refs)
+        nom_commune, _, population, _ = get_commune_name_from_insee(insee_code, insee_refs)
         df_commune = df[df[commune_id] == insee_code].copy()
-        if len(df_commune) >= nb_contribution_min:
+        n_min = nb_contribution_min[0] if population <= 5000 else nb_contribution_min[1]
+        if len(df_commune) >= n_min:
             # moyennage de l'ensemble des critères d'évaluation
-            filtered, filter, adjusted_mean, adjusted_std = filter_one_commune_2025_method(df_commune, questions_to_average, avg_note_att_name)
-            if filter:
-                potential_fraudulous_communes.append(nom_commune)
+            filtered, filter, adjusted_mean, adjusted_std, largest_queue = filter_one_commune_2025_method(df_commune, questions_to_average,
+                                                                                           nom_commune, avg_note_att_name)
+
             if nom_commune in communes_to_save or filter:
+                save_fold = f'{histo_save_fold}/specified_communes' if nom_commune in communes_to_save else f'{histo_save_fold}/potential_fraud_detected'
+                make_dir(save_fold)
                 plot_histo(df_commune[avg_note_att_name],1,6,0.2, adjusted_mean, adjusted_std,
                            f"Distribution de la note moyenne pour la commune {nom_commune} (avant filtrage)",
-                           f'{histo_save_fold}/histo_avg_notes_{nom_commune}_avant_filtrage.png')
+                           f'{save_fold}/histo_avg_notes_{nom_commune}_avant_filtrage.png')
 
                 plot_histo(filtered[avg_note_att_name], 1, 6, 0.2, adjusted_mean, adjusted_std,
                            f"Distribution de la note moyenne pour la commune {nom_commune} (après filtrage)",
-                           f'{histo_save_fold}/histo_avg_notes_{nom_commune}_après_filtrage.png')
-            all_filtered_data.append(filtered)
-    print('Nombre de communes avec plus de 10 contributiuons', len(all_filtered_data))
+                           f'{save_fold}/histo_avg_notes_{nom_commune}_après_filtrage.png')
+                if filter:
+                    potential_fraudulous_communes.append(nom_commune)
+                    plot_histo_response_time(df_commune, f'{save_fold}/histo_time_response_{nom_commune}.png',
+                                             largest_queue, nom_commune)
+                commentaries = df_commune[[avg_note_att_name, ip_id, commentaire_id]].dropna(subset=[commentaire_id])
+                commentaries.to_csv(f'{save_fold}/commentraires_qualitatifs_{nom_commune}.csv')
+
+            df_ip_doublon_view = create_view_with_identical_ip(df_commune, ip_id, commentaire_id, email_id, avg_note_att_name)
+            if len(df_ip_doublon_view) > 0:
+                save_fold_ip = f'{histo_save_fold}/identical_ip'
+                make_dir(save_fold_ip)
+                communes_with_identical_ip.append(nom_commune)
+                df_ip_doublon_view.to_csv(f'{save_fold_ip}/{nom_commune}_identical_ip.csv')
+
+            if len(filtered) >= n_min:
+                all_filtered_data.append(filtered)
+    print('Nombre de communes qualifiées', len(all_filtered_data))
     print('Nombre de communes potentiellement frauduleuse', len(potential_fraudulous_communes))
     print('Communes potentiellement frauduleuses', potential_fraudulous_communes)
+    print('Nombre de communes avec des ips identiques', len(communes_with_identical_ip))
+    #print('Communes avec des ips identiques', communes_with_identical_ip)
+    #print('Communes avec des ips identiques, qui n"ont pas été détectées frauduleuse',
+          #[c for c in communes_with_identical_ip if c not in potential_fraudulous_communes])
     all_filtered_data = pd.concat(all_filtered_data, ignore_index=True)
     # all_filtered_data.to_csv("/home/thibaut/filtered.csv", index=False)
     write_csv_on_s3(all_filtered_data, save_key)
     return all_filtered_data
 
-def get_commune_name_from_insee(insee_code, insee_refs):
-    """
-    Determine le nom de commune associé à un code insee
-    ENTREES
-        insee_code (str) : code insee d'une commune
-        insee_refs (pd.DataFrame) : tableau pandas associant les codes INSEE au nom de commune et autres caractéristiques de la commune
-            (attributs du tableau pandas : "INSEE", "TYP_COM", "STATUT_2017", "DEP", "REG", "POPULATION", "Catégorie Baromètre" "EPCI")
-    SORTIES
-        nom_commune : le nom de la commune associée au code insee d'entrée
-        categorie : categorie de commune associé (ec : grande villes, villes moyennes, bourgs et villages etc ...)
-        not_found (bool) : vaut True ssi le numéro INSEE n'a pas été trouvé dans le tableau. Dans ce cas, la commune est considérée
-            comme égale à insee_code.
 
-    """
-    nom_commune = insee_refs.loc[
-        insee_refs["INSEE"] == insee_code, "Commune"]  # récupère le nom de la commune associée au code INSEE
-    categorie = insee_refs.loc[insee_refs["INSEE"] == insee_code, "Catégorie Baromètre"]
-    not_found = (len(nom_commune) == 0)
-    if not_found:
-        print(f"Le numéro INSEE {insee_code} n'a pas été trouvé dans le tableau des communes")
-        nom_commune = insee_code
-        categorie = 'Not found'
-    else:
-        nom_commune = nom_commune.item()
-        categorie = categorie.item()
-    return nom_commune, categorie, not_found
-
-def compute_adjusted_mean_std(df):
+def compute_adjusted_mean_std(df, commune_name):
     """calcul la moyenne ajustée et l'écart-type ajusté d'un data frame pandas, définis comme les moyennes et écart-types
      du data frame auquel on a supprimé les valeurs extrêmes. Ces dernières sont définies comme les valeurs inférieur à 1.5 ou supérieur à 5.5 ou
-    au dela de la moyenne initiale + ou - 2 l'écart type initial
+    au dela de la moyenne initiale + ou - 2 l'écart type initial. S'il s'avère que adjusted_mean + 2*adjusted_std dépasse 5.5, adjusted_std
+    est modifié tel que adjusted_mean + 2*adjusted_std = 5.5. En effet, pour de rares cas adjusted_mean + 2*adjusted_std dépassait 6, et donc
+    la méthodologie de nettoyage qui compte le nombre de valeurs extremes ne fonctionnait pas (idem pour adjusted_mean - 2*adjusted_std
+    inférieur à 1.5)
     ENTREE :
         df (pd.DataFrame) : un data frame pandas unidimensionnel
+        commune_name (str) : le nom de la commune
     SORTIE :
         adjusted_mean (float) : la moyenne ajustée calculé sur df après avoir supprimé les valeures extrêmes
         adjusted_std (float) : l'écart-type ajusté
@@ -189,6 +205,12 @@ def compute_adjusted_mean_std(df):
     # calcul des deuxièmes moyennes et ecart type après avoir supprimé les réponses au dela de moyenne +- 2 écarts types
     df2 = df[(df >= mean_avg_notes - 2 * std_avg_notes) & (df <= mean_avg_notes + 2 * std_avg_notes) & (df>1.5) & (df<5.5)]
     adjusted_mean, adjusted_std = df2.mean(), np.nan_to_num(df2.std())
+    if adjusted_mean + 2*adjusted_std >= 5.5:
+        #print('adjusted std modifié 5.5', commune_name)
+        adjusted_std = (5.5 - adjusted_mean)/2
+    if adjusted_mean - 2*adjusted_std <= 1.5:
+        #print('adjusted std modifié 1.5', commune_name)
+        adjusted_std = (adjusted_mean - 1.5)/2
     return adjusted_mean, adjusted_std
 
 
@@ -225,6 +247,41 @@ def plot_histo(values, start, stop, step, adjusted_mean, adjusted_std, title, sa
     plt.close()
 
 
+def plot_histo_response_time(df_commune, save_path, largest_queue, nom_commune, x=12):
+    """trace l'histogramme des dates de remplissage du formulaire.
+    ENTREES :
+        df_commune (pd.DataFrame) : sous-ensemble du questionnaire
+        save_path (str) : localisation de sauvegarde de l'histogramme
+        x (int) : nombre d'heures dans un intervalle de l'histogramme"""
+    # Conversion de la colonne 'date' en datetime
+    dates = pd.to_datetime(df_commune["date"], errors='coerce')
+    dates = dates.dropna()
+
+    # Regrouper les dates par tranche de x heures
+    bins = pd.date_range(start=dates.min().floor('h'),
+                         end=dates.max().ceil('h'),
+                         freq=f'{x}h')
+
+    # Histogramme : découpe les dates selon les intervalles
+    counts, _ = pd.cut(dates, bins=bins, right=False, retbins=True)
+    hist = counts.value_counts().sort_index()
+
+    dates_largest_queue = pd.to_datetime(largest_queue["date"], errors='coerce').dropna()
+    counts_largest_queue, _ = pd.cut(dates_largest_queue, bins=bins, right=False, retbins=True)
+    hist_largest_queue = counts_largest_queue.value_counts().sort_index()
+
+
+    # Tracer l'histogramme
+    plt.figure(figsize=(12, 6))
+    plt.bar([interval.left for interval in hist.index], hist.values, width=pd.Timedelta(hours=x))
+    plt.bar([interval.left for interval in hist_largest_queue.index], hist_largest_queue.values, width=pd.Timedelta(hours=x), color='orange')
+    plt.gcf().autofmt_xdate()
+    plt.xlabel(f"Date (pas de {x} heures)")
+    plt.ylabel("Nombre d'événements")
+    plt.title(f"Histogramme des dates de réponse {nom_commune} ({x}h)")
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
 
 
 if __name__ == '__main__':
@@ -239,19 +296,31 @@ if __name__ == '__main__':
     email_id = "email" if data_2025 else "q56"
     emails = data[email_id]
     commune_id = "insee" if data_2025 else "q01" # insee = communes pour les données de 2025, "q01" = communes pour les données de 2021
-
+    commentaire_id = "q35" if data_2025 else "q42"
+    ip_id = "ip"
     questions_to_average = [f"q{i}" for i in range(7,34)] \
         if data_2025 else [f"q{i}" for i in range(14, 41)]
     # questions associées à l'ensemble des critères d'évalutations pour l'année 2025
 
     save_key = "data/converted/2025/nettoyee/reponses-2025-04-29-filtered.csv" if data_2025 else \
                 "data/reproduced/2021/reponses-2021-12-01-08-00-00_filtered_2025_method.csv"
-    histogram_save_fold = "../histograms/histograms_2025" if data_2025 else "../histograms/histograms_2021"
+    histogram_save_fold = f"{your_local_save_fold}/histograms/histograms_2025_new_thresh" if data_2025 else f"{your_local_save_fold}/histograms/histograms_2021"
     insee_refs = preview_file(key="data/converted/2025/brut/220128_BV_Communes_catégories.csv", csv_sep=",", nrows=None)
 
-    communes_to_save = ["Dainville", "Strasbourg", "Illkirch-Graffenstaden", "Lyon", "Paris", "Marseille", "Vesoul"]
-    #communes_to_save = ["Villeneuve-de-la-Raho", "Notre-Dame-de-Monts", "Vieux-Boucau-les-Bains"]
-    all_filtered_data = filter_data_set(data, questions_to_average, commune_id, save_key, insee_refs,
+    #communes_to_save = ["Vieux-Boucau-les-Bains", "Le Touquet-Paris-Plage", "Bram", "La Tranche-sur-Mer", "Montmorot", "Groix", "Saint-Uze", "Saint-Drézéry",
+                        #"Provin", "Châteauneuf-de-Galaure", "Saint-Aunès", "Baden"] # meilleures et moins bonnes communes de la catégorie bourg et villages
+
+    #communes_to_save = ["Acigné", "Bretignolles-sur-Mer", "Tarnos", "Marseillan", "Lacanau", "Caussade", "Esbly", "Loireauxnence",
+                        #"Castries", "Guéret"] # meilleures et moins bonnes communes de la catégorie petites villes
+    #communes_to_save = ["Le Bourget-du-Lac", "Lieusaint", "Meylan", "L'Union", "Séné", "Les Pennes-Mirabeau", "Chennevières-sur-Marne",
+                        #"Le Houlme", "Chamalières", "Gagny"] ## meilleures et moins bonnes communes de la catégorie communes de banlieues
+    #communes_to_save = ["Bourg-en-Bresse", "Épinal", "La Rochelle", "Cherbourg-en-Cotentin", "Valserhône", "Carcassonne", "Cambrai",
+       #"Menton", "Béziers", "Chambéry"] ## meilleures et moins bonnes communes de la catégorie villes moyennes
+
+    #communes_to_save = ["Grenoble", "Strasbourg", "Lyon", "Rennes", "Nantes",
+                        #"Marseille", "Saint-Étienne", "Nîmes", "Limoges", "Aix-en-Provence"]  ## meilleures et moins bonnes communes de la catégorie grandes villes
+    communes_to_save = []
+    all_filtered_data = filter_data_set(data, questions_to_average, commune_id, commentaire_id, ip_id, email_id, save_key, insee_refs,
                                         histogram_save_fold, communes_to_save)
     print('filtered data shape', all_filtered_data.shape)
     #all_filtered_data.to_csv("/home/thibaut/filtered.csv", index=False)

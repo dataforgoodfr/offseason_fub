@@ -1,5 +1,4 @@
-import os.path
-
+from manage_files import your_local_save_fold, make_dir
 from lecture_ecriture_donnees import preview_file
 from nettoyage_donnees import get_commune_name_from_insee
 import numpy as np
@@ -16,9 +15,8 @@ insee_codes = ["80164", "39198", "94078", "62263"]
 questions_to_average = [f"q{i}" for i in range(14, 41)]
 start, stop, step = 1, 6, 0.2
 
-save_fold = "../histograms/histograms_2021_with_2021_method"
-if not os.path.exists(save_fold):
-    os.makedirs(save_fold)
+save_fold = f"{your_local_save_fold}/histograms/histograms_2021_with_2021_method"
+make_dir(save_fold)
 
 for insee_code in insee_codes:
     nom_commune, _, _ = get_commune_name_from_insee(insee_code, insee_refs)
