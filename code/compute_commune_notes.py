@@ -7,7 +7,7 @@ import numpy as np
 
 
 
-def compute_notes(df, insee_refs, group_of_questions, save_fold, commune_id="insee", commune_type_id="Catégorie Baromètre",
+def compute_notes(df, insee_refs, group_of_questions, save_fold, save_key_s3, commune_id="insee", commune_type_id="Catégorie Baromètre",
                                                                     avg_note_att_name="average_note"):
     """Calcule les notes des communes, ce qui inclut la note moyenne à l'ensemble des questions d'évaluation, mais également les notes
     myennes des différentes catégories de questions. Les notes sont ensuite sauvegardées, par ordre décroissant de note moyenne,
@@ -49,6 +49,7 @@ def compute_notes(df, insee_refs, group_of_questions, save_fold, commune_id="ins
         notes_df[categorie] = notes_df[categorie].sort_values(by="Note moyenne", ascending=False)
         notes = notes_df[categorie]
         notes.to_csv(f"{save_fold}/note_communes_{categorie}.csv", index=False)
+        write_csv_on_s3(notes, f"{save_key_s3}/note_communes_{categorie}.csv")
     return notes_df
 
 def get_class_from_note(note):
@@ -84,7 +85,7 @@ if __name__ == '__main__':
         insee_refs = preview_file(key="data/converted/2025/brut/220128_BV_Communes_catégories.csv", csv_sep=",", nrows=None)
         print('columns insee refs', insee_refs.columns)
 
-        filtered_data_key = "data/converted/2025/nettoyee/reponses-2025-04-29-filtered.csv" if data_2025 else \
+        filtered_data_key = "data/converted/2025/nettoyee/250604_Export_Reponses_Final_Result_Nettoyee.csv" if data_2025 else \
                             "data/reproduced/2021/reponses-2021-12-01-08-00-00_filtered_2025_method.csv"
         df = preview_file(filtered_data_key, nrows=None)
         commune_id = "insee" if data_2025 else "q01"
@@ -99,13 +100,14 @@ if __name__ == '__main__':
                               'Securité': [f"q{i}" for i in range(20, 26)],
                               'Ressenti général': [f"q{i}" for i in range(14, 20)]}
 
-        #save_key_s3 ="data/converted/2025/nettoyee/notes_communes.csv"
-        save_fold = f"{your_local_save_fold}/barometre_notes/notes_2025" if data_2025 else f"{your_local_save_fold}/barometre_notes/notes_2021"
-        notes_df = compute_notes(df, insee_refs, group_of_questions, save_fold, commune_id)
+        save_key_s3 = "data/converted/2025/nettoyee" if data_2025 else "data/reproduced/2021"
+        save_fold = f"{your_local_save_fold}/barometre_notes_good_data/notes_2025" if data_2025 else f"{your_local_save_fold}/barometre_notes_good_data/notes_2021"
+        notes_df = compute_notes(df, insee_refs, group_of_questions, save_fold, save_key_s3, commune_id)
         two_editions_notes.append(notes_df)
 
 
-    merged_save_fold = f"{your_local_save_fold}/barometre_notes/merged_2021_2025_3"
+    merged_save_fold = f"{your_local_save_fold}/barometre_notes_good_data/merged_2021_2025"
+    merged_save_fold_s3 = "data/converted/2025/nettoyee/merged_2021_2025"
     make_dir(merged_save_fold)
     for categorie in notes_df.keys():
         merged_notes = two_editions_notes[0][categorie].copy()
@@ -131,6 +133,7 @@ if __name__ == '__main__':
                 merged_notes.loc[merged_notes["insee"] == insee, "Evolution (%)"] = evolution_percentage_str
 
         merged_notes.to_csv(f"{merged_save_fold}/note_communes_{categorie}.csv", index=False)
+        write_csv_on_s3(merged_notes, f'{merged_save_fold_s3}/note_communes_{categorie}.csv')
 
 
 
