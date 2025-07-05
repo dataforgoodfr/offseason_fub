@@ -101,7 +101,7 @@ if __name__ == '__main__':
                               'Ressenti général': [f"q{i}" for i in range(14, 20)]}
 
         save_key_s3 = "data/converted/2025/nettoyee" if data_2025 else "data/reproduced/2021"
-        save_fold = f"{your_local_save_fold}/barometre_notes_good_data/notes_2025" if data_2025 else f"{your_local_save_fold}/barometre_notes_good_data/notes_2021"
+        save_fold = f"{your_local_save_fold}/barometre_notes_good_data_2/notes_2025_2" if data_2025 else f"{your_local_save_fold}/barometre_notes_good_data/notes_2021"
         notes_df = compute_notes(df, insee_refs, group_of_questions, save_fold, save_key_s3, commune_id)
         two_editions_notes.append(notes_df)
 

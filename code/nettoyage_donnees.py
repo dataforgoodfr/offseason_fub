@@ -8,15 +8,16 @@ from utils import get_commune_name_from_insee
 
 
 def filter_one_commune_2025_method(df_commune, commune_name, communes_to_filter=[], communes_not_to_filter=[],
-                                   avg_note_att_name="average_note", alpha=8*10**-4):
+                                   avg_note_att_name="average_note", alpha=8*10**-4, beta=2):
     """Applique la méthodologie de nettoyage à un tableau pandas associé à une commune partiuclière (df_commune).
     La méthodologie est la suivante :
     1) calcul d'une moyenne et d'un écart type ajustés à l'aide de la méthode compute_adjusted_mean_std
     2) Comptage du nombre d'éléments dans la queue inférieure (valeures de notes moyennes inférieures à adjusted_mean - 2*adjusted_std)
         et dans la queue supérieure (valeures supérieures à adjusted_mean + 2*adjusted_std)
     3) Si le nombre d'élements dans la queue inférieure N_low ou dans la queue supérieure N_upp est largement supérieur au nombre d'éléments
-        auquel on aurait pu s'attendre si la distribution était gaussienne, alors les queues sont supprimées (i.e. seule la partie centrale
-        de la distribution est conservée).
+        auquel on aurait pu s'attendre si la distribution était gaussienne, alors la queue dont le nombre d'élément est trop important
+        est partiellement supprimée (on supprime les éléments de cette queue de sorte à garder autant d'élement que dans l'autre queue,
+        de sorte à ne pas désiquilibrer la distribution de l'autre côté)
 
     Plus précisément un formalisme de test d'hypothèse est utilisé, avec pour hypothèse nulle H0 : la distribution des notes moyennes
     est gaussienne. Si la distribution est gaussienne, alors on sait que la probabilité qu'un échantillon soit
@@ -29,7 +30,7 @@ def filter_one_commune_2025_method(df_commune, commune_name, communes_to_filter=
     une fraude. Il peut y avoir d'autres raisons (par exemple, une partie de la ville est bien desservie en pistes cyclables et l'autre non).
     En utilisant le formalisme de test d'hypothèse décrit plus haut, il s'avérait que l'algorithme rejetait l'hypothèse H0 bien trop souvent même
     avec des valeurs de alpha extremement faibles. C'est pourquoi, on choisit de filter les queues inférieures et supérieures seulement
-    lorsque N_low ou N_upp sont supérieurs à 2*k (au lieu de k).
+    lorsque N_low ou N_upp sont supérieurs à beta*k (au lieu de k).
 
     ENTREES :
         - df_commune (pd.DataFrame) : sous-ensemble des réponses associé à une commune particulière
@@ -54,16 +55,31 @@ def filter_one_commune_2025_method(df_commune, commune_name, communes_to_filter=
     N_sample = len(df_commune)
     p = norm.cdf(-2)  # probabilité qu'un echantillon aléatoire d'une distribution gaussienne soit inférieur à mu - 2*std
     k = int(binom.ppf(1 - alpha, N_sample, p)) # k est tel que P(Y>k) = alpha avec Y ~ B(N_sample, p)
-    filter = (len(upper_queue) >= 2*k or len(lower_queue) >= 2*k)
-    if (filter or commune_name in communes_to_filter) and commune_name not in communes_not_to_filter:
-        print('Communes filtrée', commune_name)
-        print('N sample', N_sample)
-        print('k', k)
-        print('len upper queue', len(upper_queue))
-        print('len lower queue', len(lower_queue))
-        filtered_data = central_values.copy()
-    else:
+    if commune_name in communes_not_to_filter:
         filtered_data = df_commune.copy()
+        filter = False
+    elif (len(upper_queue) >= beta*k and len(lower_queue) >= beta*k) or commune_name in communes_to_filter:
+        filtered_data = central_values.copy()
+        filter = True
+    elif len(upper_queue) >= beta*k and len(lower_queue) <= beta*k:
+        nb_elt_to_supress = len(upper_queue) - len(lower_queue)
+        limit_val = df_commune[avg_note_att_name].nlargest(nb_elt_to_supress).iloc[-1]
+        filtered_data = df_commune[df_commune[avg_note_att_name]<limit_val].copy()
+        filter = True
+    elif len(upper_queue) <= beta*k and len(lower_queue) >= beta *k:
+        #print('len lower', len(lower_queue))
+        #print('len upper', len(upper_queue))
+
+        nb_elt_to_suppress = len(lower_queue) - len(upper_queue)
+        #print('nb elt to suppress', nb_elt_to_suppress)
+        #print('n smallest', df_commune[avg_note_att_name].nsmallest(nb_elt_to_suppress))
+        limit_val = df_commune[avg_note_att_name].nsmallest(nb_elt_to_suppress).iloc[-1]
+
+        filtered_data = df_commune[df_commune[avg_note_att_name]>limit_val].copy()
+        filter = True
+    else: #len(upper_queue) <= 2*k and len(lower_queue) <= 2 *k:
+        filtered_data = df_commune.copy()
+        filter = False
     largest_queue = upper_queue if len(upper_queue) > len(lower_queue) else lower_queue
     return filtered_data, filter, adjusted_mean, adjusted_std, largest_queue
 
@@ -140,14 +156,17 @@ def filter_data_set(df, questions_to_average, commune_id, commentaire_id, ip_id,
     SORTIES:
         - all_filtered_data (pd.DataFrame). Le tableau pandas contenant les données netoyées
     """
-
     make_dir(histo_save_fold)
-    df = df.dropna(subset=questions_to_average)
+    #df = df.dropna(subset=questions_to_average)
     insee_codes = df[commune_id].unique()
     all_filtered_data = []
     print('nombre de communes avec au moins 1 contribution', len(insee_codes))
-    potential_fraudulous_communes = []
+    potential_fraudulous_communes = pd.DataFrame(columns=["Nom commune", "Commune éliminée après nettoyage", "Nombre de contributions supprimées",
+                                                          "Nombre de contributions avant nettoyage",
+                                                          "Nombre de contributions après nettoyage",
+                                                          "filtrage ip", "filtrage distribution"])
     communes_with_identical_ip = []
+    df = df.dropna(subset=questions_to_average)
     for insee_code in insee_codes:
         nom_commune, _, population, _ = get_commune_name_from_insee(insee_code, insee_refs)
         df_commune = df[df[commune_id] == insee_code].copy()
@@ -171,7 +190,8 @@ def filter_data_set(df, questions_to_average, commune_id, commentaire_id, ip_id,
             save_folds = np.array([f'{histo_save_fold}/specified_communes', f'{histo_save_fold}/potential_fraud_detected'])
             save_folds = save_folds[[nom_commune in communes_to_save, filter]]
             if filter:
-                potential_fraudulous_communes.append(nom_commune)
+                row = [nom_commune, len(filtered)<n_min, len(df_commune)-len(filtered), len(df_commune), len(filtered), filter_ip, filter_distr]
+                potential_fraudulous_communes.loc[len(potential_fraudulous_communes)] = row
             for save_fold in save_folds:
                 make_dir(save_fold)
                 plot_histo(df_commune[avg_note_att_name],1,6,0.2, adjusted_mean, adjusted_std,
@@ -195,11 +215,14 @@ def filter_data_set(df, questions_to_average, commune_id, commentaire_id, ip_id,
                 all_filtered_data.append(filtered)
     print('Nombre de communes qualifiées', len(all_filtered_data))
     print('Nombre de communes potentiellement frauduleuse', len(potential_fraudulous_communes))
-    print('Communes potentiellement frauduleuses', potential_fraudulous_communes)
     print('Nombre de communes avec des ips identiques', len(communes_with_identical_ip))
     #print('Communes avec des ips identiques', communes_with_identical_ip)
     #print('Communes avec des ips identiques, qui n"ont pas été détectées frauduleuse',
           #[c for c in communes_with_identical_ip if c not in potential_fraudulous_communes])
+    potential_fraudulous_communes = potential_fraudulous_communes.sort_values(by="Nombre de contributions supprimées", ascending=False)
+    #potential_fraudulous_communes = potential_fraudulous_communes.sort_values(by="Nom commune",
+                                 #                                             ascending=False)
+    potential_fraudulous_communes.to_csv(f'{histo_save_fold}/_potentielles_fraudes.csv')
     all_filtered_data = pd.concat(all_filtered_data, ignore_index=True)
     # all_filtered_data.to_csv("/home/thibaut/filtered.csv", index=False)
     write_csv_on_s3(all_filtered_data, save_key)
@@ -324,13 +347,20 @@ if __name__ == '__main__':
 
     save_key = "data/converted/2025/nettoyee/250604_Export_Reponses_Final_Result_Nettoyee.csv" if data_2025 else \
                 "data/reproduced/2021/reponses-2021-12-01-08-00-00_filtered_2025_method.csv"
-    histogram_save_fold = f"{your_local_save_fold}/histograms_good_data/histograms_2025_iles" if data_2025 else f"{your_local_save_fold}/histograms/histograms_2021"
+    histogram_save_fold = f"{your_local_save_fold}/histograms_good_data/histograms_2025_not_filter_selection" if data_2025 else f"{your_local_save_fold}/histograms/histograms_2021"
     insee_refs = preview_file(key="data/converted/2025/brut/220128_BV_Communes_catégories.csv", csv_sep=",", nrows=None)
 
-    # communes_to_save = ["Épinal"]
-    communes_not_to_filter = ["Grenoble", "Paris", "Lyon", "Marseille"]
+
+    communes_not_to_filter = ["Grenoble", "Paris", "Lyon", "Marseille", "Gap", "Lunéville", "Neuilly-Plaisance", "Pibrac",
+                                "Ploemeur", "Villemomble", "Voiron"]
 
     communes_to_filter = []
+    communes_to_save = ["Bourg-en-Bresse", "Gujan-Mestras", "Cherbourg-en-Cotentin", "La Rochelle", "Chambéry"]
+
+
+    all_filtered_data = filter_data_set(data, questions_to_average, commune_id, commentaire_id, ip_id, email_id,
+                                        save_key, insee_refs, histogram_save_fold, communes_to_save, communes_to_filter,
+                                        communes_not_to_filter)
 
 
     #communes_to_save = ["Bourg-en-Bresse", "Gujan-Mestras", "Cherbourg-en-Cotentin", "La Rochelle", "Chambéry",
@@ -351,12 +381,10 @@ if __name__ == '__main__':
     #communes_to_save = ["Jullouville", "Vieux-Boucau-les-Bains", "Notre-Dame-de-Monts", "Le Trait", "Soulac-sur-Mer", "Le Touquet-Paris-Plage",
                         #"Drémil-Lafage", "Saint-Uze", "Muizon", "Veigny-Foncenex", "Chadrac"] # meilleures et moins bonnes communes de la catégorie bourg et villages
 
-    communes_to_save = ["L'Île-d'Yeu", "Île-de-Bréhat", "Ouessant"]
+    #communes_to_save = ["L'Île-d'Yeu", "Île-de-Bréhat", "Ouessant"]
 
 
-    all_filtered_data = filter_data_set(data, questions_to_average, commune_id, commentaire_id, ip_id, email_id, save_key, insee_refs,
-                                        histogram_save_fold, communes_to_save, communes_to_filter, communes_not_to_filter)
-    print('filtered data shape', all_filtered_data.shape)
+
     #all_filtered_data.to_csv("/home/thibaut/filtered.csv", index=False)
 
 
