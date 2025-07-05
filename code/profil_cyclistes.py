@@ -6,7 +6,7 @@ from local_paths import your_local_save_fold
 import numpy as np
 import textwrap
 
-"""code pour analyser les questions liées au profil du cycliste, non encore fonctionnel"""
+"""code pour analyser les questions liées au profil du cycliste. La fonction principale est profile_charecteristics"""
 
 questions_id = [f'q{i}' for i in range(36, 49)]
 
@@ -81,11 +81,12 @@ def profile_characteristics_sub_df(sub_df, profile_df, possible_answers, row_nam
 def profile_charecteristics(df, question_id, possible_answers, split_question_id, split_question_answers,
                             save_fold, title, ylabel="Nombre de réponses, en pourcentage du total", nb_answer_on_bar=False):
     """Sauvegarde un diagrammme en bar (et le tableau csv des valeures associées) qui précise la proportion de pesonnes
-    ayant répondu pour chacune des réponses possibles (spécifiée dans possible_answers). Les résultats sont séparées en
-    fonction d'un critère de séparation (par exemple genre, catégorie du baromètre, ville ...). Le fichier csv sauvegardé
-    contient N+1 colonne et M+1 lignes avec N = len(possible_answers) et M = len(split_question_answers). Les colonnes sont les
-    différentes réponses possibles + une colonne associée au nombre total de réponses. Les lignes sont les différentes catégories
-    de la spération + une colonne associé au décompe global des réponses (sans séparation)
+    ayant répondu pour chacune des réponses possibles (spécifiée dans possible_answers) à la question référencée par question_id.
+    Les résultats sont séparées en fonction d'un critère de séparation (par exemple genre, catégorie du baromètre, ville ...) référencé
+    par split_question_id.
+    Le fichier csv sauvegardé contient N+1 colonne et M+1 lignes avec N = len(possible_answers) et M = len(split_question_answers).
+    Les colonnes sont les différentes réponses possibles + une colonne associée au nombre total de réponses.
+    Les lignes sont les différentes catégories de la spération + une colonne associé au décompe global des réponses (sans séparation)
     ENTREES :
         - df : data frame pandas contenant les résultats du questionnaire (si possible après nettoyage)
         - question_id (str) : référence de la colonne associées à la colonne que l'on souhaite analyser. df[question_id] est une colonne
