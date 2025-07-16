@@ -225,7 +225,7 @@ def filter_data_set(df, questions_to_average, commune_id, commentaire_id, ip_id,
     potential_fraudulous_communes.to_csv(f'{histo_save_fold}/_potentielles_fraudes.csv')
     all_filtered_data = pd.concat(all_filtered_data, ignore_index=True)
     # all_filtered_data.to_csv("/home/thibaut/filtered.csv", index=False)
-    write_csv_on_s3(all_filtered_data, save_key)
+    # write_csv_on_s3(all_filtered_data, save_key)
     return all_filtered_data
 
 
@@ -347,7 +347,7 @@ if __name__ == '__main__':
 
     save_key = "data/converted/2025/nettoyee/250604_Export_Reponses_Final_Result_Nettoyee.csv" if data_2025 else \
                 "data/reproduced/2021/reponses-2021-12-01-08-00-00_filtered_2025_method.csv"
-    histogram_save_fold = f"{your_local_save_fold}/histograms_good_data/histograms_2025_not_filter_selection" if data_2025 else f"{your_local_save_fold}/histograms/histograms_2021"
+    histogram_save_fold = f"{your_local_save_fold}/histograms_good_data/histograms_2025_potential_frauds" if data_2025 else f"{your_local_save_fold}/histograms/histograms_2021"
     insee_refs = preview_file(key="data/converted/2025/brut/220128_BV_Communes_catégories.csv", csv_sep=",", nrows=None)
 
 
@@ -355,7 +355,15 @@ if __name__ == '__main__':
                                 "Ploemeur", "Villemomble", "Voiron"]
 
     communes_to_filter = []
-    communes_to_save = ["Bourg-en-Bresse", "Gujan-Mestras", "Cherbourg-en-Cotentin", "La Rochelle", "Chambéry"]
+    communes_to_save = ["Montpellier", "Groix", "Gâvres", "Port-Louis", "Riantec", "Guidel", "Hennebont", "Cabourg",
+    "Dives-sur-Mer", "Bayeux", "Toulon", "Ollioules", "Le Lavandou", "Sainte-Maxime", "La Croix-Valmer",
+    "Bormes-les-Mimosas", "Cavalaire-sur-Mer", "Ramatuelle", "Saint-Cyr-sur-Mer", "La Londe-les-Maures",
+    "Gassin", "Grimaud", "Carqueiranne", "Les Baux-de-Provence", "Mas-Blanc-des-Alpilles", "Sénas", "Lambesc",
+    "Lançon-Provence", "Éguilles", "Saint-Paul-lès-Durance", "Berre-l'Étang", "Mimet", "La Penne-sur-Huveaune",
+    "Saint-Chamas", "Le Rove", "Saint-Victoret", "Gémenos", "Saint-Mitre-les-Remparts", "Gignac-la-Nerthe",
+    "Châteauneuf-les-Martigues", "Cassis", "Port-de-Bouc", "Fos-sur-Mer", "Belcodène", "Aurons",
+    "Maussane-les-Alpilles", "Peyrolles-en-Provence", "Jouques", "Vernègues", "La Barben"]
+
 
 
     all_filtered_data = filter_data_set(data, questions_to_average, commune_id, commentaire_id, ip_id, email_id,

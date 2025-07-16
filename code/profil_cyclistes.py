@@ -80,7 +80,7 @@ def profile_characteristics_sub_df(sub_df, profile_df, possible_answers, row_nam
 
 def profile_charecteristics(df, question_id, possible_answers, split_question_id, split_question_answers,
                             save_fold, title, ylabel="Nombre de réponses, en pourcentage du total", nb_answer_on_bar=False):
-    """Sauvegarde un diagrammme en bar (et le tableau csv des valeures associées) qui précise la proportion de pesonnes
+    """Sauvegarde un diagrammme en bar (et le tableau csv des valeures associées) qui précise la proportion de personnes
     ayant répondu pour chacune des réponses possibles (spécifiée dans possible_answers) à la question référencée par question_id.
     Les résultats sont séparées en fonction d'un critère de séparation (par exemple genre, catégorie du baromètre, ville ...) référencé
     par split_question_id.
@@ -89,7 +89,7 @@ def profile_charecteristics(df, question_id, possible_answers, split_question_id
     Les lignes sont les différentes catégories de la spération + une colonne associé au décompe global des réponses (sans séparation)
     ENTREES :
         - df : data frame pandas contenant les résultats du questionnaire (si possible après nettoyage)
-        - question_id (str) : référence de la colonne associées à la colonne que l'on souhaite analyser. df[question_id] est une colonne
+        - question_id (str) : référence de la colonne associées à la question que l'on souhaite analyser. df[question_id] est une colonne
             qui doit contenir les réponses à la question. La pluspart du temps les réponses sont encodées par des nombre entiers.
             Pour certaines questions, il est possible qu'une personne choissise plusieurs réponses. Dans ce cas les réponses possibles
             sont séparées par le symbole ','. (ex : '1,3').

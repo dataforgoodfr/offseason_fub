@@ -48,7 +48,7 @@ def compute_notes(df, insee_refs, group_of_questions, save_fold, save_key_s3, co
     for categorie in notes_df.keys():
         notes_df[categorie] = notes_df[categorie].sort_values(by="Note moyenne", ascending=False)
         notes = notes_df[categorie]
-        notes.to_csv(f"{save_fold}/note_communes_{categorie}.csv", index=False)
+        notes.to_excel(f"{save_fold}/note_communes_{categorie}.xlsx", index=False)
         write_csv_on_s3(notes, f"{save_key_s3}/note_communes_{categorie}.csv")
     return notes_df
 
@@ -106,7 +106,7 @@ if __name__ == '__main__':
         two_editions_notes.append(notes_df)
 
 
-    merged_save_fold = f"{your_local_save_fold}/barometre_notes_good_data/merged_2021_2025"
+    merged_save_fold = f"{your_local_save_fold}/barometre_notes_good_data/merged_2021_2025_2"
     merged_save_fold_s3 = "data/converted/2025/nettoyee/merged_2021_2025"
     make_dir(merged_save_fold)
     for categorie in notes_df.keys():
@@ -132,7 +132,7 @@ if __name__ == '__main__':
                 evolution_percentage_str = f'{sign(evolution_percentage)}{evolution_percentage}%'
                 merged_notes.loc[merged_notes["insee"] == insee, "Evolution (%)"] = evolution_percentage_str
 
-        merged_notes.to_csv(f"{merged_save_fold}/note_communes_{categorie}.csv", index=False)
+        merged_notes.to_excel(f"{merged_save_fold}/note_communes_{categorie}.xlsx", index=False)
         write_csv_on_s3(merged_notes, f'{merged_save_fold_s3}/note_communes_{categorie}.csv')
 
 
