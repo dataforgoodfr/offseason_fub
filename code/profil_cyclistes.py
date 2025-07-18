@@ -111,7 +111,7 @@ def profile_charecteristics(df, question_id, possible_answers, split_question_id
 
     profile_characteristics_sub_df(df[question_id], profile_df, possible_answers, "Global")
     profile_df = profile_df.fillna(0)
-    profile_df.to_excel(f'{save_fold}/{title}.xlsx', index=False)
+    profile_df.to_excel(f'{save_fold}/{title}.xlsx'.replace('?', ''), index=False)
     Nx = len(possible_answers)//nb_split_histo
     split_possible_answers = [list(possible_answers.values())[a*Nx:(a+1)*Nx] if a < nb_split_histo -1 else list(possible_answers.values())[a*Nx:] for a in range(nb_split_histo)]
     y_max = profile_df.iloc[:, :-1].max().max()
@@ -157,7 +157,7 @@ def profile_charecteristics(df, question_id, possible_answers, split_question_id
             title_a = title + f'_{a}'
         else:
             title_a = title
-        plt.savefig(f'{save_fold}/{title_a}.svg')
+        plt.savefig(f'{save_fold}/{title_a}.svg'.replace('?', ''))
         plt.close()
 
 
