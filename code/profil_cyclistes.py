@@ -47,7 +47,7 @@ possible_answers = [{1:"Pour aller au travail", 2:"Pour aller à l'école", 3:"P
                     {1:"Oui", 2:"Non"},
                     {1:"Urbain (bus, tram, métro)", 2:"Inter-Urbain (TER, car)", 3:"Les deux", 4:"Non"},
                     {1:"Oui", 2:"Non"},
-                    {1:"Hommes", 2:"Femmes"},
+                    {1:"Femmes", 2:"Hommes"},
                     {1:"Moins de 11 ans", 2:"11-14 ans", 3:"15-18 ans", 4:"19-24 ans", 5:"25-34 ans", 6:"35-44 ans",
                      7:"45-54 ans", 8:"55-64 ans", 9:"65-75 ans", 10:"Plus de 75 ans"}]
 
@@ -79,7 +79,7 @@ def profile_characteristics_sub_df(sub_df, profile_df, possible_answers, row_nam
             profile_df.loc[row_name, answer_label] = nb_answers / len(sub_df)
 
 def profile_charecteristics(df, question_id, possible_answers, split_question_id, split_question_answers,
-                            save_fold, title, ylabel="Nombre de réponses, en pourcentage du total", nb_answer_on_bar=False):
+                            save_fold, title, ylabel="Nombre de réponses, en pourcentage du total", nb_answer_on_bar=False, nb_split_histo=1):
     """Sauvegarde un diagrammme en bar (et le tableau csv des valeures associées) qui précise la proportion de personnes
     ayant répondu pour chacune des réponses possibles (spécifiée dans possible_answers) à la question référencée par question_id.
     Les résultats sont séparées en fonction d'un critère de séparation (par exemple genre, catégorie du baromètre, ville ...) référencé
@@ -110,48 +110,63 @@ def profile_charecteristics(df, question_id, possible_answers, split_question_id
         profile_characteristics_sub_df(sub_df, profile_df, possible_answers, split_question_answers[key])
 
     profile_characteristics_sub_df(df[question_id], profile_df, possible_answers, "Global")
+    profile_df = profile_df.fillna(0)
     profile_df.to_csv(f'{save_fold}/{title}.csv')
+    Nx = len(possible_answers)//nb_split_histo
+    split_possible_answers = [list(possible_answers.values())[a*Nx:(a+1)*Nx] if a < nb_split_histo -1 else list(possible_answers.values())[a*Nx:] for a in range(nb_split_histo)]
+    y_max = profile_df.iloc[:, :-1].max().max()
+    for a in range(nb_split_histo):
+        possible_answers_a = split_possible_answers[a]
+        x = np.arange(len(possible_answers_a))
+        fig, ax = plt.subplots(figsize=(20, 12))
+        s = 0.8
+        width = s/len(split_question_answers.keys())
+        for i,key in enumerate(list(split_question_answers.keys())):
+            proportion_array = np.array(profile_df.loc[split_question_answers[key]].iloc[:-1].values)
+            if a < nb_split_histo -1:
+                proportion_array = proportion_array[a*Nx:(a+1)*Nx]
+            else:
+                proportion_array = proportion_array[a*Nx:]
+            absolute_values_array = proportion_array * profile_df.loc[split_question_answers[key], "Nombre total de réponses"]
+            bars = ax.bar(x+width*(i+0.5)-s/2, proportion_array, width, label=split_question_answers[key])
+            if nb_answer_on_bar:
+                for i,bar in enumerate(bars):
+                    height = bar.get_height()
+                    ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        height,
+                        f'{int(absolute_values_array[i])}',
+                        ha='center',
+                        va='bottom',
+                        fontsize=15
+                    )
 
-    x = np.arange(len(possible_answers.values()))
-    fig, ax = plt.subplots(figsize=(20, 12))
-    s = 0.8
-    width = s/len(split_question_answers.keys())
-    for i,key in enumerate(list(split_question_answers.keys())):
-        proportion_array = np.array(profile_df.loc[split_question_answers[key]].iloc[:-1].values)
-        absolute_values_array = proportion_array * profile_df.loc[split_question_answers[key], "Nombre total de réponses"]
-        bars = ax.bar(x+width*(i+0.5)-s/2, proportion_array, width, label=split_question_answers[key])
-        if nb_answer_on_bar:
-            for i,bar in enumerate(bars):
-                height = bar.get_height()
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    height,
-                    f'{int(absolute_values_array[i])}',
-                    ha='center',
-                    va='bottom',
-                    fontsize=15
-                )
 
-
-    wrap_ylabel = '\n'.join(textwrap.wrap(ylabel, width=50))
-    ax.set_ylabel(wrap_ylabel, fontsize=20)
-    ax.set_title(title, fontsize=40)
-    ax.set_xticks(x)
-    wrapped_labels = ['\n'.join(textwrap.wrap(label, width=20)) for label in possible_answers.values()]
-    ax.set_xticklabels(wrapped_labels)
-    ax.legend(fontsize=20)
-    ax.tick_params(axis='y', labelsize=20)
-    ax.tick_params(axis='x', labelsize=15)
-    plt.tight_layout()
-    plt.savefig(f'{save_fold}/{title}.png')
-    plt.close()
+        wrap_ylabel = '\n'.join(textwrap.wrap(ylabel, width=50))
+        ax.set_ylabel(wrap_ylabel, fontsize=20)
+        ax.set_title(title, fontsize=30)
+        ax.set_xticks(x)
+        ax.set_ylim((0,y_max+0.02))
+        wrapped_labels = ['\n'.join(textwrap.wrap(label, width=20)) for label in possible_answers_a]
+        ax.set_xticklabels(wrapped_labels)
+        ax.legend(fontsize=20)
+        ax.tick_params(axis='y', labelsize=20)
+        ax.tick_params(axis='x', labelsize=15)
+        plt.tight_layout()
+        if a >0:
+            title_a = title + f'_{a}'
+        else:
+            title_a = title
+        plt.savefig(f'{save_fold}/{title_a}.svg')
+        plt.close()
 
 
 if __name__ == '__main__':
+    pd.set_option('future.no_silent_downcasting', True)
     insee_refs = preview_file(key="data/converted/2025/brut/220128_BV_Communes_catégories.csv", csv_sep=",", nrows=None)
     filtered_data_key = "data/converted/2025/nettoyee/250604_Export_Reponses_Final_Result_Nettoyee.csv"
     df = preview_file(filtered_data_key, nrows=None)
-    save_fold = f"{your_local_save_fold}/barometre_profile_new_method"
+    save_fold = f"{your_local_save_fold}/barometre_profile_new_method_2"
     make_dir(save_fold)
 
     # tracé des graphes associés aux violenecs en séparant par genre
@@ -221,4 +236,112 @@ if __name__ == '__main__':
     df_nb_rep = pd.DataFrame(columns=["Nombre total de réponses", "Nombre de réponses q39 (violences déclarées)", "Nombre de réponses q62 (plainte déposée)"])
     df_nb_rep.loc[0] = [nb_total, nb_violences_declarees, nb_plaintes_deposees]
     df_nb_rep.to_csv(f'{save_fold}/nb_reponses_q38_39_62.csv')
+
+    """graphes associées aux raisons d'utilisation du vélo"""
+
+    # séparation par genre
+    q_idx = 0 #Dans quel but utilisez vous le vélo
+    s_idx = -2
+    title = 'Dans quel(s) but(s) utilisez vous le vélo ? (par genre)'
+    question_id, poss_answers = questions_id[q_idx], possible_answers[q_idx]
+    split_question_id, split_question_answers = questions_id[s_idx], possible_answers[s_idx]
+    profile_charecteristics(df, question_id, poss_answers, split_question_id, split_question_answers, save_fold, title,
+                            nb_answer_on_bar=True)
+
+    # séparation par tranche d'âge
+    s_idx = -1
+    title = "Dans quel(s) but(s) utilisez vous le vélo ? (par tranches d'âge)"
+    split_question_id, split_question_answers = questions_id[s_idx], possible_answers[s_idx]
+    profile_charecteristics(df, question_id, poss_answers, split_question_id, split_question_answers, save_fold, title,
+                            nb_answer_on_bar=False)
+
+    # séparation par tranches d'êges élargies
+    def g(x):
+        if x in range(1,4):
+            return 1
+        elif x in range(4,8):
+            return 2
+        else:
+            return 3
+    df_age = df.copy()
+    df_age["new_age_categorie"] = df[questions_id[s_idx]].apply(g)
+    split_question_id = "new_age_categorie"
+    title = "Dans quel(s) but(s) utilisez vous le vélo ? (par tranches d'âge élargies)"
+    split_question_answers = {1:"Jeunes (0-18 ans)", 2:"Adultes (18-54 ans)", 3: "Seniors (+54 ans)"}
+    profile_charecteristics(df_age, question_id, poss_answers, split_question_id, split_question_answers, save_fold, title)
+
+    # séparation QPV/hors QPV
+    title = "Dans quel(s) but(s) utilisez vous le vélo ? (QPV - hors QPV)"
+    df_qpv = df.copy()
+    df_qpv["qpv"] = df_qpv["q4"].notna().astype(int)
+    split_question_id = "qpv"
+    split_question_answers = {0:"Habitants QPV", 1:"Habitants hors hors QPV"}
+
+    profile_charecteristics(df_qpv, question_id, poss_answers, split_question_id, split_question_answers, save_fold, title,
+                            nb_answer_on_bar=True)
+
+    """analyses catégorielles sur les données des non cyclistes"""
+
+    non_cyclistes_data_key = "data/converted/2025/nettoyee/250604_Export_Reponses_Final_Result_Non_Cyclistes.csv"
+    df_non_cyclistes = preview_file(non_cyclistes_data_key, nrows=None)
+
+    question_id = "q51"
+    poss_answers = {1 :"Vitesse des véhicules motorisés est trop élevée",
+                    2 :"Pas assez d'aménagements cyclables",
+                    3 :"Je ne me sens pas en sécurité à vélo",
+                    4 :"Trop de pollution",
+                    5 : "Trop de véhicules motorisés",
+                    6 : "J'habite trop loin de mon lieu de travail/d'études",
+                    7 : "Je préfère utiliser ma voiture",
+                    8 : "Je préfère utiliser les transports en commun",
+                    9 : "Peur de me faire voler mon vélo",
+                    10 : "Je n'ai pas de vélo",
+                    11 : "Raisons de santé",
+                    12 : "Pas possible de prendre de vélo dans les transports en commun",
+                    13 : "Je ne sais pas faire de vélo",
+                    14 : "Mauvaises conditions météorologique",
+                    15 : "Trop lent",
+                    16 :"Faire du vélo est mal perçu dans mon entourage professionnel et/ou personnel",
+                    17 : "Compliqué d’amener des enfants à l'école à vélo",
+                    18 :"Coût élevé",
+                    19 : "Pas de douche sur mon lieu de travail",
+                    20 :"Je ne sais pas",
+                    21 :"Je n'aime pas le vélo"}
+
+    # spération par genre
+    title = 'Pour quelles raisons ne faites-vous pas de vélo ? (par genre)'
+    split_question_id = "q56"
+    split_question_answers =  {1:"Femmes", 2:"Hommes"}
+    profile_charecteristics(df_non_cyclistes, question_id, poss_answers, split_question_id, split_question_answers, save_fold, title,
+                            nb_answer_on_bar=True, nb_split_histo=3)
+
+    # séparation par tranches d'âge
+    title = "Pour quelles raisons ne faites-vous pas de vélo ? (par tranches d'âges)"
+    split_question_id = "q57"
+    split_question_answers = possible_answers[-1]
+    profile_charecteristics(df_non_cyclistes, question_id, poss_answers, split_question_id, split_question_answers,
+                            save_fold, title, nb_split_histo=3)
+
+
+    # séparation par tranches d'âges élargies
+    df_non_cycl_age = df_non_cyclistes.copy()
+    df_non_cycl_age["new_age_categorie"] = df_non_cyclistes["q57"].apply(g)
+    split_question_id = "new_age_categorie"
+    title = "Pour quelles raisons ne faites-vous pas de vélo ? (par tranches d'âge élargies)"
+    split_question_answers = {1: "Jeunes (0-18 ans)", 2: "Adultes (18-54 ans)", 3: "Seniors (+54 ans)"}
+    profile_charecteristics(df_non_cycl_age, question_id, poss_answers, split_question_id, split_question_answers, save_fold,
+                            title, nb_split_histo=3)
+
+    # séparation par catégories du baromètre
+    df_non_cycl_categorie = df_non_cyclistes.copy()
+    split_question_id = "Catégorie de commune"
+
+    df_non_cycl_categorie[split_question_id] = df_categorie["insee"].apply(lambda insee: categories[insee])  # ajoute une colonne avec la catégorie du baromètre
+    split_question_answers = {c: c for c in cat_labels}
+    title = "Pour quelles raisons ne faites-vous pas de vélo ? (par catégories du baromètre)"
+    profile_charecteristics(df_non_cycl_categorie, question_id, poss_answers, split_question_id, split_question_answers,
+                            save_fold, title,  nb_split_histo=3)
+
+
+
 
