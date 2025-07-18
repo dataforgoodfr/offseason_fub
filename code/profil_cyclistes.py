@@ -111,7 +111,7 @@ def profile_charecteristics(df, question_id, possible_answers, split_question_id
 
     profile_characteristics_sub_df(df[question_id], profile_df, possible_answers, "Global")
     profile_df = profile_df.fillna(0)
-    profile_df.to_excel(f'{save_fold}/{title}.xlsx'.replace('?', ''), index=False)
+    profile_df.to_excel(f'{save_fold}/{title}.xlsx'.replace('?', ''), index=True)
     Nx = len(possible_answers)//nb_split_histo
     split_possible_answers = [list(possible_answers.values())[a*Nx:(a+1)*Nx] if a < nb_split_histo -1 else list(possible_answers.values())[a*Nx:] for a in range(nb_split_histo)]
     y_max = profile_df.iloc[:, :-1].max().max()
@@ -235,7 +235,7 @@ if __name__ == '__main__':
     X = [nb_total, nb_violences_declarees, nb_violences_declarees]
     df_nb_rep = pd.DataFrame(columns=["Nombre total de réponses", "Nombre de réponses q39 (violences déclarées)", "Nombre de réponses q62 (plainte déposée)"])
     df_nb_rep.loc[0] = [nb_total, nb_violences_declarees, nb_plaintes_deposees]
-    df_nb_rep.to_excel(f'{save_fold}/nb_reponses_q38_39_62.xlsx', index=False)
+    df_nb_rep.to_csv(f'{save_fold}/nb_reponses_q38_39_62.xlsx', index=True)
 
     """graphes associées aux raisons d'utilisation du vélo"""
 
