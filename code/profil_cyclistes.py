@@ -47,7 +47,7 @@ possible_answers = [{1:"Pour aller au travail", 2:"Pour aller à l'école", 3:"P
                     {1:"Oui", 2:"Non"},
                     {1:"Urbain (bus, tram, métro)", 2:"Inter-Urbain (TER, car)", 3:"Les deux", 4:"Non"},
                     {1:"Oui", 2:"Non"},
-                    {1:"Femmes", 2:"Hommes"},
+                    {1:"Femmes", 2:"Hommes", 3:"Ne se prononcent pas"},
                     {1:"Moins de 11 ans", 2:"11-14 ans", 3:"15-18 ans", 4:"19-24 ans", 5:"25-34 ans", 6:"35-44 ans",
                      7:"45-54 ans", 8:"55-64 ans", 9:"65-75 ans", 10:"Plus de 75 ans"}]
 
@@ -166,7 +166,7 @@ if __name__ == '__main__':
     insee_refs = preview_file(key="data/converted/2025/brut/220128_BV_Communes_catégories.csv", csv_sep=",", nrows=None)
     filtered_data_key = "data/converted/2025/nettoyee/250604_Export_Reponses_Final_Result_Nettoyee.csv"
     df = preview_file(filtered_data_key, nrows=None)
-    save_fold = f"{your_local_save_fold}/barometre_profile_new_method_3"
+    save_fold = f"{your_local_save_fold}/barometre_profile_genre"
     make_dir(save_fold)
 
     # tracé des graphes associés aux violenecs en séparant par genre
@@ -311,7 +311,7 @@ if __name__ == '__main__':
     # spération par genre
     title = 'Pour quelles raisons ne faites-vous pas de vélo ? (par genre)'
     split_question_id = "q56"
-    split_question_answers =  {1:"Femmes", 2:"Hommes"}
+    split_question_answers =  {1:"Femmes", 2:"Hommes", 3:"Ne se prononcent pas"}
     profile_charecteristics(df_non_cyclistes, question_id, poss_answers, split_question_id, split_question_answers, save_fold, title,
                             nb_answer_on_bar=True, nb_split_histo=3)
 
