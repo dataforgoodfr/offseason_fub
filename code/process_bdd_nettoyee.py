@@ -42,7 +42,7 @@ from lecture_ecriture_donnees import preview_file, make_dir, write_csv_on_s3
 data = preview_file(key="data/converted/2025/nettoyee/250604_Export_Reponses_Final_Result_Nettoyee.csv", csv_sep=";", nrows=None)
 insee_refs = preview_file(key="data/converted/2025/brut/220128_BV_Communes_catégories.csv", csv_sep=",", nrows=None)
 
-columns_to_keep = ['email', 'insee', 'q47', 'q48', 'q4', 'q6', 'q7', 'q29', 'q30', 'q31', 'q32', 'q25', 'q26', 'q27', 'q28', 'q20', 
+columns_to_keep = ['uid', 'email', 'insee', 'q47', 'q48', 'q4', 'q6', 'q7', 'q29', 'q30', 'q31', 'q32', 'q25', 'q26', 'q27', 'q28', 'q20', 
                    'q21', 'q22', 'q23', 'q24', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q7', 'q8', 'q9', 'q10', 'q11', 
                    'q12', 'q13', 'q37', 'q45', 'average_note']
 
@@ -109,7 +109,7 @@ df['q6'] = df['q6'].astype('Int64')
 map_FCC1 = {
     1: 'Tous les jours',
     2: '1 à 3 fois par semaine',
-    3: '1 à 3 fois par mois ',
+    3: '1 à 3 fois par mois',
     4: '1 à 3 fois par ans',
     5: 'Jamais',
 } 
@@ -198,6 +198,10 @@ df_merged.to_csv(file_csv, index=False, sep=';')
 save_path = 'data/converted/2025/nettoyee/processed/250604_Export_Reponses_Final_Result_Nettoyee_Processed.csv'  
 write_csv_on_s3(df_merged, save_path)
 
+#consolidated path for EDA
+save_path = 'data/DFG/2025/data_num/250604_Export_Reponses_Final_Result_Nettoyee_Processed.csv'  
+write_csv_on_s3(df_merged, save_path)
+
 #Remove sensitive information and q columns
 columns_to_remove = ['email', 'insee', 'q47', 'q48', 'q4', 'q6', 'q7', 'q29', 'q30', 'q31',
        'q32', 'q25', 'q26', 'q27', 'q28', 'q20', 'q21', 'q22', 'q23', 'q24',
@@ -211,4 +215,7 @@ df_filtered.to_csv(file_csv, index=False, sep=';')
 save_path = 'data/converted/2025/nettoyee/processed/données2025_traitées_nettoyées_anonymisées.csv'  
 write_csv_on_s3(df_filtered, save_path)
 
+#consolidated path for EDA
+save_path = 'data/DFG/2025/data_num/données2025_traitées_nettoyées_anonymisées.csv'  
+write_csv_on_s3(df_filtered, save_path)
 
