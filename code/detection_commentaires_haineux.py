@@ -6,6 +6,7 @@ from openai import RateLimitError, InternalServerError
 from local_paths import your_local_save_fold
 from dotenv import load_dotenv
 import os
+from lecture_ecriture_donnees import preview_file
 
 
 
@@ -15,7 +16,7 @@ api_key = os.getenv("API_KEY")
 client = OpenAI(api_key=api_key)
 
 # --- Lecture des commentaires ---
-df = pd.read_csv("bdd.csv")
+df = preview_file("data/converted/2025/nettoyee/250604_Export_Reponses_Final_Result_Nettoyee.csv")
 batch_size = 50
 comm_id = 'q35'
 
