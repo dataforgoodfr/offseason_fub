@@ -87,6 +87,7 @@ if __name__ == '__main__':
 
         filtered_data_key = "data/converted/2025/nettoyee/250604_Export_Reponses_Final_Result_Nettoyee.csv" if data_2025 else \
                             "data/reproduced/2021/reponses-2021-12-01-08-00-00_filtered_2025_method.csv"
+
         df = preview_file(filtered_data_key, nrows=None)
         commune_id = "insee" if data_2025 else "q01"
         group_of_questions = {'Services et stationnement': [f"q{i}" for i in range(29, 33)],
