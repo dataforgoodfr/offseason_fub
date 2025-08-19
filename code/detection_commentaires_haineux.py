@@ -10,7 +10,6 @@ from lecture_ecriture_donnees import preview_file
 
 
 
-
 load_dotenv()
 api_key = os.getenv("API_KEY")
 client = OpenAI(api_key=api_key)
