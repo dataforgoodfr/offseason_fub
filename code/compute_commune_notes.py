@@ -23,7 +23,7 @@ def compute_notes(df, insee_refs, group_of_questions, save_fold, save_key_s3, co
     SORTIES :
         notes_df (pd.DataFrame) Tableau  pandas regroupans les notes"""
 
-    note_tables_columns = ["insee", "Commune", "Nombre de réponses (après filtrage)", "Note moyenne", "Classe", "Type de commune",
+    note_tables_columns = ["insee", "Commune", "Nombre de réponses (après filtrage)", "Moyenne des questions", "Moyenne des catégories","Classe", "Type de commune",
                            *group_of_questions.keys()]
     insee_codes = df[commune_id].unique()
     types_of_communes = insee_refs[commune_type_id].unique()
@@ -34,19 +34,22 @@ def compute_notes(df, insee_refs, group_of_questions, save_fold, save_key_s3, co
         nom_commune, categorie, _, not_found = get_commune_name_from_insee(insee_code, insee_refs)
         if not_found:
             not_found_insee_codes.append(insee_code)
-        avg_note = round(df_commune[avg_note_att_name].values.mean(),2)
+        avg_note = df_commune[avg_note_att_name].values.mean()
         classe = get_class_from_note(avg_note)
         nouvelle_ligne = [insee_code, nom_commune, len(df_commune), avg_note, classe, categorie]
-
+        moyennes_catégories = 0
         for group in group_of_questions.keys():
             average_note = df_commune[group_of_questions[group]].values.mean()
-            nouvelle_ligne.append(round(average_note,2))
+            moyennes_catégories += average_note
+            nouvelle_ligne.append(average_note)
+        moyennes_catégories/=len(group_of_questions.keys())
+        nouvelle_ligne.insert(4, moyennes_catégories)
         if categorie in notes_df.keys():
             notes_df[categorie].loc[len(notes_df[categorie])] = nouvelle_ligne
     print("les codes insee suivants n'ont pas été trouvés dans le tableau des communes", not_found_insee_codes)
     make_dir(save_fold)
     for categorie in notes_df.keys():
-        notes_df[categorie] = notes_df[categorie].sort_values(by="Note moyenne", ascending=False)
+        notes_df[categorie] = notes_df[categorie].sort_values(by="Moyenne des questions", ascending=False)
         notes = notes_df[categorie]
         notes.to_excel(f"{save_fold}/note_communes_{categorie}.xlsx", index=False)
         write_csv_on_s3(notes, f"{save_key_s3}/note_communes_{categorie}.csv")
@@ -102,7 +105,7 @@ if __name__ == '__main__':
                               'Ressenti général': [f"q{i}" for i in range(14, 20)]}
 
         save_key_s3 = "data/converted/2025/nettoyee" if data_2025 else "data/reproduced/2021"
-        save_fold = f"{your_local_save_fold}/barometre_notes_good_data_2/notes_2025_2" if data_2025 else f"{your_local_save_fold}/barometre_notes_good_data/notes_2021"
+        save_fold = f"{your_local_save_fold}/barometre_notes_good_data_2/notes_new_method" if data_2025 else f"{your_local_save_fold}/barometre_notes_good_data/notes_2021"
         notes_df = compute_notes(df, insee_refs, group_of_questions, save_fold, save_key_s3, commune_id)
         two_editions_notes.append(notes_df)
 
@@ -122,13 +125,13 @@ if __name__ == '__main__':
         for i in range(len(merged_notes)):
             insee = merged_notes.iloc[i]["insee"]
             note_2021 = notes_2021.loc[notes_2021["insee"]==insee, "Note globale"]
-            note_2021_methodo_2025 = notes_2021_methodo_2025.loc[notes_2021_methodo_2025["insee"]==insee, "Note moyenne"]
+            note_2021_methodo_2025 = notes_2021_methodo_2025.loc[notes_2021_methodo_2025["insee"]==insee, "Moyenne des catégories"]
             if len(note_2021) == 1:
                 merged_notes.loc[merged_notes["insee"]==insee, "Note moyenne 2021 méthode 2025"] = note_2021_methodo_2025.item()
                 merged_notes.loc[merged_notes["insee"]==insee, "Note moyenne 2021"] = round(note_2021.item(),2)
                 merged_notes.loc[merged_notes["insee"]==insee, "Différence méthodes 2021 / 2025 sur les données 2021"] \
                     = round(np.abs(note_2021.item()-note_2021_methodo_2025.item()),3)
-                note_2025 = merged_notes.loc[merged_notes["insee"]==insee, "Note moyenne"].item()
+                note_2025 = merged_notes.loc[merged_notes["insee"]==insee, "Moyenne des catégories"].item()
                 evolution_percentage = round(100 * (note_2025 - note_2021.item())/note_2021.item(),1)
                 evolution_percentage_str = f'{sign(evolution_percentage)}{evolution_percentage}%'
                 merged_notes.loc[merged_notes["insee"] == insee, "Evolution (%)"] = evolution_percentage_str
