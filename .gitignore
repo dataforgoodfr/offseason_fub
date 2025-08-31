@@ -170,3 +170,5 @@ difference_contr_comm.py
 
 #env files with keys
 .env
+temp/
+.DS_Store
